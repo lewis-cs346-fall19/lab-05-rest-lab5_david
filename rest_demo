@@ -1,0 +1,135 @@
+#! /usr/bin/python3
+
+import cgi
+import cgitb
+import json
+import os
+import MySQLdb
+import passwords
+
+cgitb.enable()
+form = cgi.FieldStorage()
+conn = MySQLdb.connect(host = passwords.SQL_HOST,
+			user = passwords.SQL_USER,
+			passwd = passwords.SQL_PASSWD,
+			db = "db1")
+new_id = None
+
+def index():
+	print("Status: 200 OK")
+	print("Content-type: text/html")
+	print()
+	print("""<html>
+	<head>
+	Welcome the JSON webpage
+	</head>
+	<body>
+	<br>
+	<a href="rest_demo/courses">Get courses</a>
+	<br>
+	<a href="rest_demo/new_course_form">Make new course</a>
+	</body>
+	</html>""")
+
+def json_call():
+	x = [1,2,30,20, {"foo": "bar"}]
+	x_json = json.dumps(x, indent=2)
+	print("Status: 200 OK")
+	print("Content-type: application/json")
+	print()
+	print("This is where we convert a python object to a JSON string")
+	print (x_json)
+
+def new_course_form():
+	print("Status: 200 OK")
+	print("Content-type: text/html")
+	print()
+	print("""<html>
+	<head>
+	</head>
+	<body>
+	<form action="/cgi-bin/rest_demo/post_info" method="POST">
+		<p>Department:
+		<input type="text" name="dept"></input>
+		<p>Course Number:
+		<input type="text" name="course_num"></input>
+		<p>Units:
+		<input type="number" name="units"></input>
+		<br>
+		<button type="submit">Submit</button>
+	</form>
+	</body>
+	</html>""")
+
+def get_single_course(val):
+	print("Status: 200 OK")
+	print("Content-type: text/plain")
+	print()
+	cursor = conn.cursor()
+	cursor.execute("SELECT * FROM courses WHERE (id LIKE %s);", (val,))
+	results = cursor.fetchall()
+	cursor.close()
+	json_results = json.dumps(results, indent=2)
+	print(json_results)
+
+def get_courses():
+	if new_id != None:
+		get_single_course(new_id)
+		return
+	else:
+		print("Status: 200 OK")
+		print("Content-type: text/plain")
+		print()
+		print(pathinfo)
+		cursor = conn.cursor()
+		cursor.execute("SELECT * FROM courses;")
+		results = cursor.fetchall()
+		cursor.close()
+		json_results = json.dumps(results, indent=2)
+		print(json_results)
+
+def post_info():
+	if "dept" in form:
+		dept = form["dept"].value
+		course_num = form["course_num"].value
+		units = form["units"].value
+
+		cursor = conn.cursor()
+		cursor.execute("INSERT INTO courses(dept, course, units, url) VALUES(%s, %s, %s, %s);", (dept, course_num, units, "https://",))
+		new_id = cursor.lastrowid
+		cursor.close()
+
+		cursor = conn.cursor()
+		cursor.execute("UPDATE courses SET url=http://ec2-54-221-106-251.compute-1.amazonaws.com/cgi-bin/rest_demo/courses/%s;", (new_id,))
+		results = cursor.fetchall()
+		url = results[3]
+		cursor.close()
+
+	print("Status: 302 Redirect")
+	print("Location: courses")
+	print()
+
+if "PATH_INFO" in os.environ:
+	pathinfo = os.environ["PATH_INFO"]
+else:
+	pathinfo = "/"
+
+if pathinfo == "/":
+    index()
+
+elif pathinfo == "/json" or pathinfo == "/json/":
+	json_call()
+
+elif pathinfo == "/courses" or pathinfo == "/courses/":
+	get_courses()
+
+elif pathinfo == "/new_course_form" or pathinfo == "/new_course_form/":
+	new_course_form()
+
+elif pathinfo == "/post_info":
+	post_info()
+
+else:
+	print("Status: 404 Not Found")
+	print()
+	print("The CGI path not found")
